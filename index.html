@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuzluChat</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; display: flex; flex-direction: column; height: 100vh; margin: 0; }
+        #nick-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 10px; }
+        #nick-input { width: 250px; }
+        #chat-screen { display: none; flex-direction: column; height: 100%; max-width: 800px; margin: auto; width: 100%; background: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        #chat { flex: 1; overflow-y: auto; padding: 20px; border-bottom: 1px solid #ddd; }
+        #form { display: flex; padding: 20px; gap: 10px; }
+        input, select, button { padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        #message-input { flex: 1; }
+        .msg { margin-bottom: 10px; }
+        .nick-span { font-weight: bold; margin-right: 5px; }
+    </style>
+</head>
+<body>
+    <div id="nick-screen">
+        <h2>Sohbete katıl</h2>
+        <input id="nick-input" placeholder="Takma Ad Gir">
+        <select id="color-select">
+            <option value="red">Kırmızı</option>
+            <option value="orange">Turuncu</option>
+            <option value="goldenrod">Sarı</option>
+            <option value="green">Yeşil</option>
+            <option value="blue">Mavi</option>
+            <option value="purple">Mor</option>
+        </select>
+        <button onclick="setNick()">Sohbete Katıl</button>
+    </div>
+
+    <div id="chat-screen">
+        <div id="chat"></div>
+        <form id="form" onsubmit="sendMessage(event)">
+            <input id="message-input" placeholder="Mesaj yaz..." autocomplete="off" />
+            <button type="submit">Gönder</button>
+        </form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let nickname = "";
+        let color = "";
+
+        const nickInput = document.getElementById('nick-input');
+
+        nickInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') setNick();
+        });
+
+        function setNick() {
+            nickname = nickInput.value;
+            color = document.getElementById('color-select').value;
+            if (nickname) {
+                document.getElementById('nick-screen').style.display = 'none';
+                document.getElementById('chat-screen').style.display = 'flex';
+            }
+        }
+
+        function sendMessage(e) {
+            e.preventDefault();
+            const input = document.getElementById('message-input');
+            if (!input.value.trim()) return;
+            socket.emit('chat message', { nickname, color, message: input.value });
+            input.value = '';
+        }
+
+        socket.on('chat message', (data) => {
+            console.log("Received data:", data); // Debugging
+            const chat = document.getElementById('chat');
+            const item = document.createElement('div');
+            item.id = `msg-${data.id}`;
+            item.className = 'msg';
+            item.onclick = () => showEmojiPanel(data.id);
+
+            const nickSpan = document.createElement('span');
+            nickSpan.className = 'nick-span';
+            nickSpan.style.color = data.color;
+            nickSpan.textContent = data.nickname + ': ';
+
+            const msgSpan = document.createElement('span');
+            msgSpan.textContent = data.message;
+
+            const reactSpan = document.createElement('span');
+            reactSpan.id = `reacts-${data.id}`;
+            reactSpan.style.marginLeft = '10px';
+
+            item.appendChild(nickSpan);
+            item.appendChild(msgSpan);
+            item.appendChild(reactSpan);
+
+            chat.appendChild(item);
+            chat.scrollTop = chat.scrollHeight;
+        });
+
+        socket.on('update reactions', (data) => {
+            const reactSpan = document.getElementById(`reacts-${data.messageId}`);
+            if (reactSpan) {
+                reactSpan.innerHTML = '';
+                for (const [emoji, count] of Object.entries(data.reactions)) {
+                    if (count > 0) {
+                        reactSpan.innerHTML += `${emoji} ${count} `;
+                    }
+                }
+            }
+        });
+
+        function showEmojiPanel(messageId) {
+            const emojis = ['👍', '👎', '❤️', '🤣', '😯', '😭', '🥀'];
+            const panel = document.createElement('div');
+            panel.style.position = 'absolute';
+            panel.style.background = 'white';
+            panel.style.border = '1px solid #ddd';
+            panel.style.borderRadius = '5px';
+            panel.style.padding = '5px';
+            panel.style.zIndex = '1000';
+
+            emojis.forEach(emoji => {
+                const btn = document.createElement('span');
+                btn.textContent = emoji;
+                btn.style.cursor = 'pointer';
+                btn.style.margin = '2px';
+                btn.onclick = () => {
+                    socket.emit('add reaction', { messageId, emoji });
+                    document.body.removeChild(panel);
+                };
+                panel.appendChild(btn);
+            });
+
+            document.body.appendChild(panel);
+            // Simple positioning near mouse
+            panel.style.left = (event.clientX + 10) + 'px';
+            panel.style.top = (event.clientY + 10) + 'px';
+        }
+
+    </script>
+</body>
+</html>
